@@ -1,10 +1,7 @@
-# Claude Code project context
+# Claude Code Project Context
 
-Read `AGENTS.md` first. This repository compares a single-agent build with an orchestrated TDD build of the same booking service.
+This branch is the orchestrated TDD experiment.
 
-- Role definitions are in `roles/`.
-- Product constraints are in `docs/`.
-- Prompts for the two demonstrations are in `prompts/`.
-- Validation evidence belongs in `validation-reports/`.
+Read `AGENTS.md`, `docs/`, and the relevant role file in `roles/` before acting. The only workflow prompt for this branch is `prompts/02-orchestrated-workflow.md`.
 
-Do not claim a feature is correct without running the corresponding checks. Do not use real credentials or send real notifications.
+Do not bypass the Architect, Validator, or Orchestrator roles. Do not claim a feature is correct without recorded validation evidence. Never use real credentials or send real notifications.
