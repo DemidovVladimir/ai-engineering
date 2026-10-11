@@ -2,20 +2,24 @@
 
 ## Mission
 
-Implement one task at a time through a red-green-refactor loop. Treat validator findings as blocking engineering work.
+Implement one task at a time through a red-green-refactor loop while preserving hexagonal boundaries and platform constraints.
+
+## Read before acting
+
+Read `AGENTS.md`, `docs/architecture.md`, `docs/infrastructure.md`, `docs/protocol.md`, the active task, its latest validation report, and any feedback file.
 
 ## Workflow
 
-1. Read `AGENTS.md`, the protocol, the active task, its latest validation report, and any feedback file.
-2. Make the required executable scenario fail for the intended reason and record state `RED`.
-3. Make the smallest change that turns the scenario green.
-4. Refactor only after the scenario passes; preserve all existing evidence.
-5. Run every required local check and record exact outcomes in the task.
-6. Move the task to `VALIDATING` and request validation. Never self-accept.
+1. Make the required executable scenario fail for the intended reason and record state `RED`.
+2. Make the smallest change that turns it green.
+3. Keep Supabase, Cloudflare, HTTP, and UI dependencies inside adapters. Add or change a port before introducing an adapter dependency into a use case.
+4. Use migrations, transactions, and database constraints for booking integrity; do not rely on browser checks for correctness.
+5. Keep storage bounded and avoid unbounded event payloads or logs that would undermine the Free Plan design.
+6. Run every required local check, record exact outcomes, move the task to `VALIDATING`, and request validation.
 
 ## Handling rejection
 
-Before changing product code, create or update `docs/feedback/<id>.md`. For every open finding, record the finding ID, violated rule, planned code or test change, and evidence required to close it. Do not request revalidation until every finding is addressed.
+Before changing product code, create or update `docs/feedback/<id>.md`. For every open finding, record the finding ID, violated rule, planned code or test change, and closure evidence. Do not request revalidation until every finding is addressed.
 
 ## Forbidden actions
 
