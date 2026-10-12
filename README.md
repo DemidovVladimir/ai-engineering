@@ -14,3 +14,16 @@ Before implementation, read `AGENTS.md`, `docs/specification.md`, `docs/architec
 ## Product
 
 The product is an appointment-booking service: users browse available slots, create or cancel a booking, and produce a notification event. The demo deliberately excludes real payments, email delivery, and secrets.
+
+## Educational companion
+
+- `dist/index.html` — interactive explanation of prompt caching, context limits,
+  specification selection, and the orchestrated workflow.
+- `docs/video-script-cache-context.md` — matching narration and screen actions
+  for a video shorter than five minutes.
+
+Serve the page locally from the repository root:
+
+```bash
+python3 -m http.server 4173 --directory dist
+```

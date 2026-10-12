@@ -1,0 +1,550 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="description" content="An interactive explanation of prompt caching, context limits, and specification-driven agent design.">
+  <title>Cache, Context, and Specification-Driven Agents</title>
+  <style>
+    :root {
+      --paper:#f5f2e8; --ink:#151a24; --muted:#5f6571; --line:#c7c2b5;
+      --green:#b9f36a; --coral:#ff765f; --violet:#a996ff; --blue:#64d8ef;
+      --white:#fffef8; --shadow:0 24px 70px rgba(21,26,36,.14);
+      --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+      --sans:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+    }
+    * { box-sizing:border-box; }
+    html { scroll-behavior:smooth; }
+    body { margin:0; color:var(--ink); background:var(--paper); font-family:var(--sans); line-height:1.5; }
+    button,input { font:inherit; }
+    button { color:inherit; }
+    a { color:inherit; }
+    .skip { position:fixed; left:1rem; top:-5rem; z-index:100; background:var(--green); padding:.8rem 1rem; font-weight:900; }
+    .skip:focus { top:1rem; }
+    .nav {
+      position:fixed; z-index:30; top:.8rem; left:50%; transform:translateX(-50%);
+      display:flex; align-items:center; gap:.2rem; padding:.35rem; max-width:calc(100vw - 1rem);
+      overflow-x:auto; border:1px solid rgba(21,26,36,.22); border-radius:999px;
+      background:rgba(245,242,232,.88); backdrop-filter:blur(16px); box-shadow:0 10px 30px rgba(21,26,36,.1);
+    }
+    .nav a,.nav button { flex:0 0 auto; border:0; background:transparent; text-decoration:none; padding:.55rem .72rem; border-radius:999px; font:800 .7rem var(--mono); cursor:pointer; }
+    .nav a:hover,.nav a:focus-visible,.nav button:hover,.nav button:focus-visible { color:var(--paper); background:var(--ink); outline:none; }
+    .nav .practice-launch { color:var(--ink); background:var(--green); }
+    .scene { min-height:100svh; padding:clamp(5.5rem,9vw,8rem) max(5vw,1.2rem); border-top:1px solid var(--line); position:relative; overflow:hidden; }
+    .scene:first-of-type { border-top:0; }
+    .eyebrow { font:900 .7rem var(--mono); letter-spacing:.12em; text-transform:uppercase; }
+    h1,h2,h3,p { margin-top:0; }
+    h1 { margin:.65rem 0 1.2rem; font-size:clamp(3.8rem,10vw,9rem); line-height:.82; letter-spacing:-.075em; max-width:1100px; }
+    h1 span { color:transparent; -webkit-text-stroke:2px var(--ink); }
+    h2 { margin:.6rem 0 0; font-size:clamp(2.7rem,6vw,6.2rem); line-height:.9; letter-spacing:-.06em; max-width:900px; }
+    h3 { font-size:clamp(1.5rem,3vw,2.4rem); line-height:1; letter-spacing:-.035em; }
+    .lede { max-width:720px; font-size:clamp(1.05rem,2vw,1.45rem); color:#373d47; }
+    .section-head { display:grid; grid-template-columns:minmax(0,1.15fr) minmax(280px,.85fr); gap:2rem; align-items:end; margin-bottom:3rem; }
+    .scene-number { display:inline-block; padding:.42rem .55rem; border:1px solid var(--ink); font:900 .72rem var(--mono); }
+    .foundation { display:grid; grid-template-columns:repeat(3,1fr); gap:1px; background:var(--ink); border:1px solid var(--ink); width:min(100%,1100px); margin-bottom:2.2rem; }
+    .foundation article { background:rgba(245,242,232,.95); padding:1rem; min-height:120px; }
+    .foundation b { display:block; margin-bottom:.5rem; font:900 .68rem var(--mono); text-transform:uppercase; letter-spacing:.06em; }
+    .foundation p { margin:0; font-size:.82rem; }
+    .hero { display:grid; align-content:center; background:radial-gradient(circle at 82% 22%,rgba(169,150,255,.34),transparent 32%),var(--paper); }
+    .hero-layout { display:grid; grid-template-columns:minmax(0,1fr) 380px; gap:3rem; align-items:end; }
+    .hero-actions { display:flex; gap:.7rem; flex-wrap:wrap; margin-top:1.5rem; }
+    .button { border:1px solid var(--ink); background:transparent; padding:.78rem 1rem; font:900 .75rem var(--mono); cursor:pointer; }
+    .button.primary { background:var(--ink); color:var(--paper); }
+    .button.green { background:var(--green); }
+    .helper-stage { min-height:410px; position:relative; border:1px solid var(--ink); background:var(--ink); color:var(--paper); box-shadow:var(--shadow); overflow:hidden; }
+    .helper-stage::before { content:""; position:absolute; width:360px; height:360px; border:1px solid rgba(255,255,255,.15); border-radius:50%; left:35%; top:18%; animation:turn 18s linear infinite; }
+    @keyframes turn { to { transform:rotate(360deg); } }
+    .helper { position:absolute; width:112px; text-align:center; animation:float 2.8s ease-in-out infinite alternate; }
+    .helper:nth-child(2) { animation-delay:-1s; }
+    .helper:nth-child(3) { animation-delay:-2s; }
+    @keyframes float { to { transform:translateY(-10px); } }
+    .helper .body { width:82px; height:82px; margin:auto; position:relative; display:grid; place-items:center; border:2px solid var(--ink); box-shadow:0 0 0 8px rgba(255,255,255,.08); }
+    .helper .eyes { display:flex; gap:18px; }
+    .helper .eyes i { display:block; width:8px; height:12px; background:var(--ink); border-radius:50%; animation:blink 4s infinite; }
+    @keyframes blink { 48%,52% { transform:scaleY(.1); } }
+    .helper strong { display:block; margin-top:.65rem; font:900 .68rem var(--mono); letter-spacing:.08em; }
+    .helper small { color:rgba(255,255,255,.6); }
+    .helper.cora { left:7%; top:12%; }
+    .helper.cora .body { background:var(--green); border-radius:18px; }
+    .helper.lex { right:6%; top:30%; }
+    .helper.lex .body { background:var(--violet); border-radius:50%; }
+    .helper.vera { left:31%; bottom:7%; }
+    .helper.vera .body { background:var(--coral); clip-path:polygon(50% 0,95% 20%,84% 80%,50% 100%,16% 80%,5% 20%); }
+    .helper-speech { position:absolute; right:1rem; bottom:1rem; max-width:190px; padding:.75rem; background:var(--paper); color:var(--ink); border:1px solid var(--paper); font-size:.75rem; }
+
+    .term-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:1px; background:var(--ink); border:1px solid var(--ink); }
+    .term { min-height:210px; padding:1.25rem; background:var(--paper); display:flex; flex-direction:column; }
+    .term b { font-size:1.2rem; }
+    .term p { margin:auto 0 0; color:var(--muted); font-size:.9rem; }
+    .term code { margin-top:.7rem; padding:.55rem; background:var(--white); font:800 .67rem var(--mono); }
+    .cache-demo { display:grid; grid-template-columns:.8fr 1.2fr; gap:1px; margin-top:2rem; background:var(--ink); border:1px solid var(--ink); }
+    .cache-copy { padding:2rem; background:var(--green); }
+    .cache-copy p { margin-bottom:0; }
+    .cache-machine { padding:2rem; background:var(--ink); color:var(--paper); min-height:340px; }
+    .token-row { display:flex; gap:.45rem; flex-wrap:wrap; margin:1.3rem 0 2rem; }
+    .token-cell { width:46px; height:46px; display:grid; place-items:center; border:1px solid rgba(255,255,255,.3); font:800 .68rem var(--mono); transition:.35s ease; }
+    .cache-machine.reused .token-cell { background:var(--green); color:var(--ink); border-color:var(--green); animation:reuse .8s ease both; }
+    .cache-machine.reused .token-cell:nth-child(2) { animation-delay:.08s; }
+    .cache-machine.reused .token-cell:nth-child(3) { animation-delay:.16s; }
+    .cache-machine.reused .token-cell:nth-child(4) { animation-delay:.24s; }
+    .cache-machine.reused .token-cell:nth-child(5) { animation-delay:.32s; }
+    .cache-machine.reused .token-cell:last-child { background:var(--coral); animation-delay:.5s; }
+    @keyframes reuse { from { opacity:.2; transform:translateY(14px); } }
+    .cache-meter { border:1px solid rgba(255,255,255,.35); height:42px; display:flex; }
+    .cache-meter span { display:grid; place-items:center; color:var(--ink); font:900 .64rem var(--mono); transition:.4s ease; }
+    .cache-meter .saved { width:0; background:var(--green); }
+    .cache-meter .new { width:100%; background:var(--coral); }
+    .cache-machine.reused .saved { width:82%; }
+    .cache-machine.reused .new { width:18%; }
+    .machine-note { margin-top:1rem; color:rgba(255,255,255,.67); font-size:.82rem; }
+    .deep-view { margin-top:2rem; border:1px solid var(--ink); background:var(--white); }
+    .deep-view summary { cursor:pointer; padding:1rem; font-weight:900; }
+    .deep-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:1px; background:var(--ink); border-top:1px solid var(--ink); }
+    .deep-grid article { padding:1rem; background:var(--white); min-height:150px; }
+    .deep-grid b { font:900 .72rem var(--mono); text-transform:uppercase; }
+    .deep-grid p { margin:.6rem 0 0; font-size:.82rem; color:var(--muted); }
+
+    .limit-layout { display:grid; grid-template-columns:.72fr 1.28fr; gap:2rem; align-items:start; }
+    .control-card { border:1px solid var(--ink); padding:1.3rem; background:var(--white); }
+    .choice { display:grid; gap:.6rem; }
+    .choice button { text-align:left; border:1px solid var(--ink); padding:1rem; background:transparent; cursor:pointer; font-weight:850; }
+    .choice button[aria-pressed="true"] { background:var(--ink); color:var(--paper); }
+    .speech-card { margin-top:1rem; display:grid; grid-template-columns:76px 1fr; gap:1rem; align-items:center; padding:1rem; background:var(--violet); border:1px solid var(--ink); }
+    .mini-helper { width:66px; height:66px; border-radius:50%; background:var(--violet); border:2px solid var(--ink); display:grid; place-items:center; font:900 1rem var(--mono); }
+    .context-box { min-height:500px; padding:2rem; color:var(--paper); background:var(--ink); border:1px solid var(--ink); position:relative; overflow:hidden; }
+    .limit-label { display:flex; justify-content:space-between; gap:1rem; font:900 .72rem var(--mono); }
+    .limit-window { height:270px; margin:1.5rem 0; border:2px solid var(--paper); display:flex; align-items:stretch; position:relative; overflow:hidden; }
+    .limit-window > div { display:grid; place-items:center; text-align:center; color:var(--ink); font:900 .75rem var(--mono); transition:.65s cubic-bezier(.2,.8,.2,1); }
+    .cached-part { width:85%; background:var(--green); }
+    .new-part { width:10%; background:var(--coral); }
+    .free-part { width:5%; background:repeating-linear-gradient(45deg,transparent,transparent 10px,rgba(255,255,255,.1) 10px,rgba(255,255,255,.1) 20px); color:var(--paper)!important; }
+    .overflow-blocks { position:absolute; inset:5.4rem 1.2rem auto; display:grid; grid-template-columns:repeat(6,1fr); gap:.35rem; opacity:0; transform:translateY(-30px); transition:.5s ease; pointer-events:none; }
+    .overflow-blocks i { height:48px; background:var(--coral); border:1px solid var(--ink); }
+    .context-box[data-case="overflow"] .cached-part { width:100%; background:var(--coral); opacity:.25; }
+    .context-box[data-case="overflow"] .new-part,.context-box[data-case="overflow"] .free-part { width:0; overflow:hidden; }
+    .context-box[data-case="overflow"] .overflow-blocks { opacity:1; transform:none; }
+    .limit-result { display:flex; justify-content:space-between; gap:1rem; align-items:center; padding:1rem; border:1px solid rgba(255,255,255,.3); }
+    .limit-result strong { font-size:clamp(1.5rem,3vw,2.5rem); }
+    .limit-result span { max-width:330px; color:rgba(255,255,255,.7); }
+
+    .spec-layout { display:grid; grid-template-columns:1fr 1fr; gap:2rem; }
+    .spec-controls { display:flex; gap:.6rem; flex-wrap:wrap; margin-bottom:1rem; }
+    .spec-controls button { border:1px solid var(--ink); padding:.7rem .9rem; background:transparent; font:900 .7rem var(--mono); cursor:pointer; }
+    .spec-controls button[aria-pressed="true"] { background:var(--green); }
+    .spec-canvas { min-height:530px; border:1px solid var(--ink); padding:1.4rem; background:var(--white); position:relative; overflow:hidden; }
+    .spec-canvas h3 { margin-bottom:1.3rem; }
+    .doc-stack { display:grid; gap:.55rem; }
+    .doc { padding:.8rem 1rem; border:1px solid var(--ink); display:flex; justify-content:space-between; gap:1rem; background:var(--paper); transition:.5s ease; }
+    .doc b { font-size:.82rem; }
+    .doc span { font:800 .64rem var(--mono); color:var(--muted); }
+    .doc.relevant { background:var(--green); }
+    .doc.old { background:var(--coral); }
+    .spec-canvas[data-mode="all"] .doc:nth-child(2) { transform:rotate(-2deg) translateX(18px); }
+    .spec-canvas[data-mode="all"] .doc:nth-child(4) { transform:rotate(1.5deg) translateX(-10px); }
+    .spec-canvas[data-mode="selected"] .doc:not(.relevant) { opacity:.13; transform:scale(.94); }
+    .spec-canvas[data-mode="selected"] .doc.relevant { transform:translateX(14px); box-shadow:8px 8px 0 var(--ink); }
+    .quality-panel { min-height:530px; padding:2rem; color:var(--paper); background:var(--ink); display:flex; flex-direction:column; }
+    .quality-panel ul { list-style:none; padding:0; display:grid; gap:.7rem; }
+    .quality-panel li { display:grid; grid-template-columns:2rem 1fr; gap:.7rem; padding-top:.7rem; border-top:1px solid rgba(255,255,255,.2); }
+    .quality-panel li b { color:var(--green); font:900 1rem var(--mono); }
+    .quality-score { margin-top:auto; padding-top:2rem; }
+    .quality-score strong { display:block; font-size:clamp(3rem,7vw,7rem); line-height:.8; color:var(--coral); transition:.4s ease; }
+    .quality-score span { font:800 .72rem var(--mono); color:rgba(255,255,255,.65); }
+    .quality-panel[data-mode="selected"] .quality-score strong { color:var(--green); }
+
+    .harness { border:1px solid var(--ink); background:var(--ink); color:var(--paper); padding:clamp(1.2rem,3vw,2rem); box-shadow:var(--shadow); }
+    .contract { display:grid; grid-template-columns:repeat(3,1fr); gap:1px; margin:1rem 0 2rem; background:rgba(255,255,255,.2); }
+    .contract div { background:var(--green); color:var(--ink); padding:1rem; font-weight:850; min-height:100px; }
+    .flow { display:grid; grid-template-columns:repeat(5,1fr); gap:.7rem; align-items:stretch; }
+    .flow-node { min-height:180px; padding:1rem; border:1px solid rgba(255,255,255,.26); background:rgba(255,255,255,.04); opacity:.32; transition:.35s ease; position:relative; }
+    .flow-node::after { content:"→"; position:absolute; right:-.7rem; top:45%; color:var(--green); font-weight:900; }
+    .flow-node:last-child::after { content:""; }
+    .flow-node.active { opacity:1; transform:translateY(-8px); border-color:var(--green); box-shadow:0 0 0 4px rgba(185,243,106,.12); }
+    .flow-node.done { opacity:1; background:rgba(185,243,106,.14); }
+    .flow-node b { display:block; color:var(--green); font:900 .68rem var(--mono); margin-bottom:1.3rem; }
+    .flow-node strong { display:block; font-size:1rem; }
+    .flow-node p { margin:.5rem 0 0; color:rgba(255,255,255,.58); font-size:.78rem; }
+    .harness-foot { display:flex; justify-content:space-between; gap:1rem; align-items:center; margin-top:1.5rem; flex-wrap:wrap; }
+    .run-status { font:800 .7rem var(--mono); color:rgba(255,255,255,.64); }
+
+    .rules { display:grid; grid-template-columns:repeat(3,1fr); gap:1px; background:var(--ink); border:1px solid var(--ink); }
+    .rule { min-height:330px; padding:1.5rem; background:var(--paper); display:flex; flex-direction:column; }
+    .rule .big { font-size:clamp(4rem,8vw,8rem); line-height:.8; letter-spacing:-.08em; }
+    .rule:nth-child(1) { background:var(--green); }
+    .rule:nth-child(2) { background:var(--violet); }
+    .rule:nth-child(3) { background:var(--coral); }
+    .rule h3 { margin:auto 0 .7rem; }
+    .rule p { margin:0; }
+    .source-note { margin-top:2rem; color:var(--muted); font-size:.82rem; }
+    .source-note a { text-underline-offset:3px; }
+
+    .practice {
+      position:fixed; z-index:60; inset:auto 1rem 1rem; max-width:920px; margin:auto;
+      color:var(--paper); background:rgba(21,26,36,.97); border:1px solid rgba(255,255,255,.25);
+      box-shadow:0 24px 80px rgba(0,0,0,.34); transform:translateY(calc(100% + 2rem)); transition:.35s ease;
+    }
+    .practice.open { transform:none; }
+    .practice-top { display:flex; justify-content:space-between; gap:1rem; align-items:center; padding:.75rem 1rem; border-bottom:1px solid rgba(255,255,255,.2); }
+    .practice-time { font:900 .8rem var(--mono); color:var(--green); }
+    .practice-top button { border:0; background:transparent; color:inherit; cursor:pointer; }
+    .practice-body { padding:1rem; }
+    .cue-row { display:flex; gap:.45rem; flex-wrap:wrap; margin-bottom:.7rem; }
+    .cue { padding:.35rem .5rem; background:rgba(255,255,255,.1); font:800 .63rem var(--mono); }
+    .narration { margin:0; font-size:clamp(.96rem,1.8vw,1.2rem); max-height:180px; overflow:auto; }
+    .practice.hidden-words .narration { filter:blur(7px); user-select:none; }
+    .practice-controls { display:flex; justify-content:space-between; gap:.7rem; padding:0 1rem 1rem; flex-wrap:wrap; }
+    .practice-controls div { display:flex; gap:.5rem; flex-wrap:wrap; }
+    .practice-controls button { border:1px solid rgba(255,255,255,.34); background:transparent; color:inherit; padding:.55rem .7rem; cursor:pointer; font:800 .68rem var(--mono); }
+    .practice-controls .next { color:var(--ink); background:var(--green); border-color:var(--green); }
+    .practice-progress { height:4px; background:rgba(255,255,255,.13); }
+    .practice-progress i { display:block; width:0; height:100%; background:var(--green); transition:width .3s linear; }
+
+    @media (max-width:900px) {
+      .hero-layout,.section-head,.cache-demo,.limit-layout,.spec-layout { grid-template-columns:1fr; }
+      .helper-stage { min-height:360px; }
+      .flow { grid-template-columns:1fr 1fr; }
+      .flow-node::after { content:"↓"; right:1rem; top:auto; bottom:-.8rem; }
+      .flow-node:last-child { grid-column:1/-1; }
+      .foundation,.term-grid,.rules { grid-template-columns:1fr 1fr; }
+      .deep-grid,.contract { grid-template-columns:1fr 1fr; }
+    }
+    @media (max-width:560px) {
+      .nav { left:.5rem; right:.5rem; transform:none; }
+      h1 { font-size:4rem; }
+      .foundation,.term-grid,.rules,.deep-grid,.contract,.flow { grid-template-columns:1fr; }
+      .flow-node:last-child { grid-column:auto; }
+      .helper-stage { min-height:410px; }
+      .helper.lex { right:2%; }
+      .limit-window { height:220px; }
+      .limit-result { align-items:flex-start; flex-direction:column; }
+      .practice { inset:auto .5rem .5rem; }
+    }
+    @media (prefers-reduced-motion:reduce) {
+      *,*::before,*::after { scroll-behavior:auto!important; animation-duration:.001ms!important; animation-iteration-count:1!important; transition-duration:.001ms!important; }
+    }
+  </style>
+</head>
+<body>
+  <a class="skip" href="#main">Go to the explanation</a>
+  <nav class="nav" aria-label="Page sections">
+    <a href="#terms">Saved work</a><a href="#limit">Input limit</a><a href="#spec">Specifications</a><a href="#harness">Harness</a><a href="#rules">Rules</a>
+    <button class="practice-launch" id="practiceLaunch">Practice narration</button>
+  </nav>
+
+  <header class="scene hero" id="top" data-scene="0">
+    <div class="foundation" aria-label="Definitions used on this page">
+      <article><b>Language model</b><p>A program that reads tokens and predicts the next token.</p></article>
+      <article><b>Agent</b><p>A program that prepares a request for a language model and uses the returned answer.</p></article>
+      <article><b>Prompt</b><p>The ordered tokens given to a language model.</p></article>
+      <article><b>Cache</b><p>Temporary storage that keeps completed work so it can be reused.</p></article>
+      <article><b>Context limit</b><p>The largest number of input and output tokens a model can use in one request.</p></article>
+      <article><b>Specification</b><p>A written set of requirements and rules for work that must be completed.</p></article>
+      <article><b>Harness</b><p>The program around a language model. It assembles requests, provides tools, and coordinates work.</p></article>
+    </div>
+    <div class="hero-layout">
+      <div>
+        <div class="eyebrow">Interactive video companion · under five minutes</div>
+        <h1>Cache, context, and <span>better agents.</span></h1>
+        <p class="lede">A cached prompt can reduce repeated calculation. It cannot increase the context limit, and it cannot make unrelated specification text useful.</p>
+        <div class="hero-actions">
+          <a class="button primary" href="#terms">Start the explanation ↓</a>
+          <button class="button green" id="heroPractice">Practice the script</button>
+        </div>
+      </div>
+      <div class="helper-stage" aria-label="Three animated teaching helpers">
+        <div class="helper cora"><div class="body"><span class="eyes"><i></i><i></i></span></div><strong>CORA</strong><small>saved work</small></div>
+        <div class="helper lex"><div class="body"><span class="eyes"><i></i><i></i></span></div><strong>LEX</strong><small>input limit</small></div>
+        <div class="helper vera"><div class="body"><span class="eyes"><i></i><i></i></span></div><strong>VERA</strong><small>validation</small></div>
+        <div class="helper-speech"><b>Three jobs, three facts.</b><br>We will explain saved work, input limits, and independent checking.</div>
+      </div>
+    </div>
+  </header>
+
+  <main id="main">
+    <section class="scene" id="terms" data-scene="1">
+      <div class="section-head">
+        <div><span class="scene-number">01</span><h2>What does the server save?</h2></div>
+        <p class="lede">Read these definitions in order. Then send the same beginning twice.</p>
+      </div>
+      <div class="term-grid">
+        <article class="term"><b>Token</b><p>A small piece of text stored as a number.</p><code>text → token numbers</code></article>
+        <article class="term"><b>Model server</b><p>A program that runs the language model and manages its temporary storage.</p><code>request → model → returned answer</code></article>
+        <article class="term"><b>Prompt prefix</b><p>The exact token numbers at the beginning of a prompt.</p><code>[18, 4, 91, ...]</code></article>
+        <article class="term"><b>Prompt cache</b><p>Saved model calculation work for a prompt prefix.</p><code>same beginning → reuse</code></article>
+        <article class="term"><b>Cached input token</b><p>An input token whose earlier calculation work was reused.</p><code>still part of the input</code></article>
+        <article class="term"><b>Cache hit</b><p>A request that finds matching saved work and reuses it.</p><code>found → reuse</code></article>
+      </div>
+      <div class="cache-demo">
+        <div class="cache-copy">
+          <div class="eyebrow">Cora · model-server view</div>
+          <h3>I save calculation work. I do not remove tokens.</h3>
+          <p>The first request calculates every token. A later request with the same beginning can reuse the saved work and calculate only the changed end.</p>
+          <button class="button" id="reuseButton">Send matching request</button>
+        </div>
+        <div class="cache-machine" id="cacheMachine">
+          <div class="eyebrow">Prompt in token order</div>
+          <div class="token-row" aria-label="Prompt token sequence"><span class="token-cell">18</span><span class="token-cell">4</span><span class="token-cell">91</span><span class="token-cell">23</span><span class="token-cell">7</span><span class="token-cell">NEW</span></div>
+          <div class="cache-meter" aria-label="Calculation work"><span class="saved">REUSED WORK</span><span class="new">WORK DONE NOW</span></div>
+          <p class="machine-note" id="cacheNote">First request: the server calculates work for every input token.</p>
+        </div>
+      </div>
+      <details class="deep-view">
+        <summary>Optional deeper view: what the saved work contains</summary>
+        <div class="deep-grid">
+          <article><b>Model layer</b><p>One calculation stage inside a language model.</p></article>
+          <article><b>Vector</b><p>An ordered list of numbers made by a model layer.</p></article>
+          <article><b>Key and value vectors</b><p>Vectors made for earlier token positions and read while processing later positions.</p></article>
+          <article><b>Key and value cache</b><p>Temporary storage containing those vectors. A prompt cache can preserve matching vectors for reuse by a later request.</p></article>
+        </div>
+      </details>
+    </section>
+
+    <section class="scene" id="limit" data-scene="2">
+      <div class="section-head">
+        <div><span class="scene-number">02</span><h2>Cached tokens still use input space.</h2></div>
+        <p class="lede">The model's context limit counts cached input, new input, and—in models with one combined limit—the output.</p>
+      </div>
+      <div class="limit-layout">
+        <div>
+          <div class="control-card">
+            <div class="eyebrow">Choose an example</div>
+            <div class="choice" style="margin-top:1rem">
+              <button aria-pressed="true" data-limit-case="fits"><b>Fits:</b> 850,000 cached + 100,000 new</button>
+              <button aria-pressed="false" data-limit-case="overflow"><b>Does not fit:</b> 10,000,000 cached + 100,000 new</button>
+            </div>
+          </div>
+          <div class="speech-card"><div class="mini-helper">LEX</div><p id="limitSpeech">Nine hundred fifty thousand input tokens fit below the one-million-token limit. Fifty thousand positions remain.</p></div>
+        </div>
+        <div class="context-box" id="contextBox" data-case="fits">
+          <div class="limit-label"><span>ONE REQUEST</span><span>LIMIT: 1,000,000 TOKENS</span></div>
+          <div class="limit-window">
+            <div class="cached-part">850,000<br>CACHED</div><div class="new-part">100,000<br>NEW</div><div class="free-part">50,000<br>LEFT</div>
+          </div>
+          <div class="overflow-blocks" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+          <div class="limit-result"><strong id="limitResult">950,000 input tokens</strong><span id="limitDetail">Caching changes repeated calculation. The tokens remain inside the request.</span></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="scene" id="spec" data-scene="3">
+      <div class="section-head">
+        <div><span class="scene-number">03</span><h2>A cached specification can still be noise.</h2></div>
+        <p class="lede">Noise means text that is unrelated, repeated, replaced, or in conflict with the current task.</p>
+      </div>
+      <div class="spec-controls" aria-label="Specification selection example">
+        <button aria-pressed="true" data-spec-mode="all">Everything included</button>
+        <button aria-pressed="false" data-spec-mode="selected">Only relevant sections</button>
+      </div>
+      <div class="spec-layout">
+        <div class="spec-canvas" id="specCanvas" data-mode="all">
+          <div class="eyebrow">Input assembled by the harness</div>
+          <h3>Booking cancellation task</h3>
+          <div class="doc-stack">
+            <div class="doc relevant"><b>Stable project contract</b><span>REQUIRED</span></div>
+            <div class="doc"><b>Old payment proposal</b><span>UNRELATED</span></div>
+            <div class="doc relevant"><b>Cancellation requirements</b><span>REQUIRED</span></div>
+            <div class="doc old"><b>Replaced booking rule</b><span>CONFLICT</span></div>
+            <div class="doc"><b>Deployment history</b><span>UNRELATED</span></div>
+            <div class="doc relevant"><b>Current tests and source code</b><span>REQUIRED</span></div>
+            <div class="doc"><b>Notification design</b><span>UNRELATED</span></div>
+          </div>
+        </div>
+        <div class="quality-panel" id="qualityPanel" data-mode="all">
+          <div class="eyebrow">Vera · validation view</div>
+          <h3 id="qualityTitle">More text is not automatically better.</h3>
+          <ul id="qualityList">
+            <li><b>01</b><span>Old and current rules can conflict.</span></li>
+            <li><b>02</b><span>Unrelated features can distract from the task.</span></li>
+            <li><b>03</b><span>An important rule can be difficult to locate.</span></li>
+          </ul>
+          <div class="quality-score"><strong id="qualityWord">CHEAPER</strong><span id="qualityCaption">TO REPEAT · NOT CLEARER TO USE</span></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="scene" id="harness" data-scene="4">
+      <div class="section-head">
+        <div><span class="scene-number">04</span><h2>The harness selects, runs, and checks.</h2></div>
+        <p class="lede">A harness is the program around the language model. It assembles each request, provides tools, and coordinates the work.</p>
+      </div>
+      <div class="harness">
+        <div class="eyebrow">Stable contract · useful cached beginning</div>
+        <div class="contract">
+          <div>One slot has at most one active booking.</div>
+          <div>The same request key creates no second booking.</div>
+          <div>A notification failure does not cancel a booking.</div>
+        </div>
+        <div class="flow" id="harnessFlow">
+          <article class="flow-node"><b>01 · SELECT</b><strong>Architect</strong><p>Chooses one task and its acceptance criteria.</p></article>
+          <article class="flow-node"><b>02 · PROVE FAILURE</b><strong>Implementer</strong><p>Creates a failing executable test.</p></article>
+          <article class="flow-node"><b>03 · CHANGE</b><strong>Implementer</strong><p>Writes only enough code to satisfy the task.</p></article>
+          <article class="flow-node"><b>04 · CHECK</b><strong>Validator</strong><p>Runs independent checks and records evidence.</p></article>
+          <article class="flow-node"><b>05 · DECIDE</b><strong>Orchestrator</strong><p>Accepts the evidence or returns findings.</p></article>
+        </div>
+        <div class="harness-foot">
+          <button class="button green" id="runHarness">Run the harness</button>
+          <span class="run-status" id="runStatus">READY · THE WORKFLOW REMAINS CORRECT WITHOUT A CACHE HIT</span>
+        </div>
+      </div>
+    </section>
+
+    <section class="scene" id="rules" data-scene="5">
+      <div class="section-head">
+        <div><span class="scene-number">05</span><h2>Three rules to remember.</h2></div>
+        <p class="lede">These rules are the complete five-minute conclusion.</p>
+      </div>
+      <div class="rules">
+        <article class="rule"><div class="big">01</div><h3>Cache stable work.</h3><p>Caching reduces repeated calculation. It does not create more input space.</p></article>
+        <article class="rule"><div class="big">02</div><h3>Select relevant text.</h3><p>Include a specification because the task needs it, not merely because it can be cached.</p></article>
+        <article class="rule"><div class="big">03</div><h3>Validate the result.</h3><p>The workflow must remain correct when saved work is unavailable.</p></article>
+      </div>
+      <div class="hero-actions">
+        <button class="button primary" id="finalPractice">Practice narration</button>
+        <button class="button" id="restartPage">Start the page again</button>
+      </div>
+      <p class="source-note">Technical sources: <a href="https://developers.openai.com/api/docs/guides/prompt-caching" target="_blank" rel="noreferrer">OpenAI prompt caching</a>, <a href="https://docs.vllm.ai/en/latest/features/automatic_prefix_caching/" target="_blank" rel="noreferrer">vLLM automatic prefix caching</a>, and <a href="https://arxiv.org/abs/2307.03172" target="_blank" rel="noreferrer">Lost in the Middle</a>.</p>
+    </section>
+  </main>
+
+  <aside class="practice" id="practice" aria-label="Narration practice panel" aria-hidden="true">
+    <div class="practice-progress"><i id="practiceProgress"></i></div>
+    <div class="practice-top"><span class="practice-time"><span id="practiceClock">00:00</span> / 04:50 · <span id="practiceScene">SCENE 1 OF 6</span></span><button id="practiceClose" aria-label="Close narration practice">Close ×</button></div>
+    <div class="practice-body">
+      <div class="cue-row" id="cueRow"></div>
+      <p class="narration" id="narration"></p>
+    </div>
+    <div class="practice-controls">
+      <div><button id="practicePrev">← Previous</button><button id="practiceNext" class="next">Next scene →</button></div>
+      <div><button id="hideWords">Hide words</button><button id="restartTimer">Restart timer</button></div>
+    </div>
+  </aside>
+
+  <script>
+    const all = (selector, root=document) => [...root.querySelectorAll(selector)];
+
+    const cacheMachine = document.querySelector('#cacheMachine');
+    const cacheNote = document.querySelector('#cacheNote');
+    document.querySelector('#reuseButton').addEventListener('click', event => {
+      const reused = cacheMachine.classList.toggle('reused');
+      event.currentTarget.textContent = reused ? 'Start with an empty cache' : 'Send matching request';
+      cacheNote.textContent = reused
+        ? 'Later request: work for the matching beginning is reused. Only the changed end is calculated now.'
+        : 'First request: the server calculates work for every input token.';
+    });
+
+    const limitCopy = {
+      fits: {
+        speech:'Nine hundred fifty thousand input tokens fit below the one-million-token limit. Fifty thousand positions remain.',
+        result:'950,000 input tokens',
+        detail:'Caching changes repeated calculation. The tokens remain inside the request.'
+      },
+      overflow: {
+        speech:'Ten million one hundred thousand input tokens cannot enter a model limited to one million. Cached tokens still count.',
+        result:'10,100,000 input tokens',
+        detail:'Request rejected or shortened. A cache cannot extend the context limit.'
+      }
+    };
+    all('[data-limit-case]').forEach(button => button.addEventListener('click', () => {
+      const mode = button.dataset.limitCase;
+      all('[data-limit-case]').forEach(item => item.setAttribute('aria-pressed', String(item === button)));
+      document.querySelector('#contextBox').dataset.case = mode;
+      document.querySelector('#limitSpeech').textContent = limitCopy[mode].speech;
+      document.querySelector('#limitResult').textContent = limitCopy[mode].result;
+      document.querySelector('#limitDetail').textContent = limitCopy[mode].detail;
+    }));
+
+    const specCopy = {
+      all:{title:'More text is not automatically better.',word:'CHEAPER',caption:'TO REPEAT · NOT CLEARER TO USE'},
+      selected:{title:'The smallest complete input is easier to use.',word:'FOCUSED',caption:'CURRENT RULES · CURRENT TASK · CURRENT EVIDENCE'}
+    };
+    all('[data-spec-mode]').forEach(button => button.addEventListener('click', () => {
+      const mode = button.dataset.specMode;
+      all('[data-spec-mode]').forEach(item => item.setAttribute('aria-pressed', String(item === button)));
+      document.querySelector('#specCanvas').dataset.mode = mode;
+      document.querySelector('#qualityPanel').dataset.mode = mode;
+      document.querySelector('#qualityTitle').textContent = specCopy[mode].title;
+      document.querySelector('#qualityWord').textContent = specCopy[mode].word;
+      document.querySelector('#qualityCaption').textContent = specCopy[mode].caption;
+    }));
+
+    let harnessTimers = [];
+    document.querySelector('#runHarness').addEventListener('click', () => {
+      harnessTimers.forEach(clearTimeout); harnessTimers = [];
+      const nodes = all('.flow-node');
+      nodes.forEach(node => node.className = 'flow-node');
+      document.querySelector('#runStatus').textContent = 'RUNNING · ONE INDEPENDENTLY CHECKED TASK';
+      nodes.forEach((node,index) => {
+        harnessTimers.push(setTimeout(() => {
+          nodes.forEach((item,itemIndex) => {
+            item.classList.toggle('active', itemIndex === index);
+            if (itemIndex < index) item.classList.add('done');
+          });
+          if (index === nodes.length - 1) {
+            harnessTimers.push(setTimeout(() => {
+              node.classList.remove('active'); node.classList.add('done');
+              document.querySelector('#runStatus').textContent = 'ACCEPTED · EVIDENCE RECORDED';
+            },700));
+          }
+        },index * 900));
+      });
+    });
+
+    const practiceScenes = [
+      {
+        target:'#top', cues:['EVERYTHING CACHED?','FASTER ≠ SMARTER','SEPARATE THE IDEAS'],
+        text:'Here is a common idea. If a coding agent can reuse a cached prompt, perhaps we can load every specification, every source file, and every decision into the prompt. Then the agent should become faster and smarter. Only the first half is true. A cache can make repeated model work faster and sometimes cheaper. It does not give the model more input space, and it does not make irrelevant information useful. Let us separate these ideas.'
+      },
+      {
+        target:'#terms', cues:['TOKEN','CONTEXT LIMIT','PROMPT CACHE'],
+        text:'First, three definitions. A token is a small piece of text stored as a number. A context limit is the largest number of input and output tokens a model can use in one request. A prompt cache stores calculation work for an unchanged beginning of a prompt. When a later request begins with the same token numbers, the model server can reuse that work. The model still receives those tokens as input. Cached describes how the calculations were obtained. It does not mean the text disappeared.'
+      },
+      {
+        target:'#limit', cues:['850,000 + 100,000','10,000,000 + 100,000','LIMIT DOES NOT MOVE'],
+        text:"Suppose a model accepts one million input tokens. Eight hundred fifty thousand cached tokens plus one hundred thousand new tokens make nine hundred fifty thousand input tokens. That can fit, although we must still reserve space for the answer when the model has one combined limit. Now try ten million cached tokens plus one hundred thousand new tokens. That is ten million one hundred thousand input tokens. The request is too large. The cache does not extend the model's limit."
+      },
+      {
+        target:'#spec', cues:['SPECIFICATION','NOISE','SELECT THE ACTIVE PART'],
+        text:'Now consider specification-driven development. A specification is a written set of requirements and rules. A precise, relevant specification can improve the answer. Sending every document can make the answer worse. Old rules may conflict with current rules. Unrelated features compete for the model\'s attention. An important requirement can become difficult to find. Caching the complete document collection makes that collection cheaper to repeat. It does not make the collection clearer. Use a small stable contract first. Select the specification sections needed for the current task. Put current source code and test results after them. Keep the complete document collection outside the request, where the agent can search it.'
+      },
+      {
+        target:'#harness', cues:['STABLE CONTRACT','ONE TASK','INDEPENDENT VALIDATION'],
+        text:'In this booking demonstration, the stable contract says that one slot can have only one active booking, the same request key cannot create a second booking, and a notification failure cannot cancel a confirmed booking. Those rules apply to every task, so they form a useful stable beginning. The Architect selects one task. The Implementer receives its acceptance criteria and relevant design. The Validator independently checks executable evidence. A rejection returns specific findings to the Implementer. The harness should not maximize the number of input tokens. It should assemble the smallest complete input each role needs, preserve a stable beginning for cache reuse, and remain correct whether the cache is found or not.'
+      },
+      {
+        target:'#rules', cues:['CACHE STABLE WORK','SELECT RELEVANT TEXT','VALIDATE'],
+        text:'Remember three rules. A cache saves calculation, not input space. A relevant specification can improve an answer, but irrelevant cached text can still hurt. The harness keeps complete knowledge outside the model and sends the active part inside. Cache the stable beginning. Select material relevant to the task. Validate the result. That is how a specification-driven agent becomes faster without confusing more input with better reasoning.'
+      }
+    ];
+    const panel = document.querySelector('#practice');
+    let practiceIndex = 0, seconds = 0, clockTimer = null;
+    const formatTime = value => `${String(Math.floor(value/60)).padStart(2,'0')}:${String(value%60).padStart(2,'0')}`;
+    function renderPractice(scroll=true) {
+      const scene = practiceScenes[practiceIndex];
+      document.querySelector('#practiceScene').textContent = `SCENE ${practiceIndex+1} OF ${practiceScenes.length}`;
+      document.querySelector('#narration').textContent = scene.text;
+      document.querySelector('#cueRow').innerHTML = scene.cues.map(cue => `<span class="cue">${cue}</span>`).join('');
+      if (scroll) document.querySelector(scene.target).scrollIntoView({behavior:'smooth',block:'start'});
+    }
+    function openPractice() {
+      panel.classList.add('open'); panel.setAttribute('aria-hidden','false');
+      if (!clockTimer) clockTimer = setInterval(() => {
+        seconds += 1; document.querySelector('#practiceClock').textContent = formatTime(seconds);
+        document.querySelector('#practiceProgress').style.width = `${Math.min(100,seconds/290*100)}%`;
+      },1000);
+      renderPractice();
+    }
+    function closePractice() { panel.classList.remove('open'); panel.setAttribute('aria-hidden','true'); }
+    ['#practiceLaunch','#heroPractice','#finalPractice'].forEach(selector => document.querySelector(selector).addEventListener('click',openPractice));
+    document.querySelector('#practiceClose').addEventListener('click',closePractice);
+    document.querySelector('#practiceNext').addEventListener('click',() => { practiceIndex = Math.min(practiceScenes.length-1,practiceIndex+1); renderPractice(); });
+    document.querySelector('#practicePrev').addEventListener('click',() => { practiceIndex = Math.max(0,practiceIndex-1); renderPractice(); });
+    document.querySelector('#hideWords').addEventListener('click',event => {
+      const hidden = panel.classList.toggle('hidden-words'); event.currentTarget.textContent = hidden ? 'Show words' : 'Hide words';
+    });
+    document.querySelector('#restartTimer').addEventListener('click',() => {
+      seconds = 0; practiceIndex = 0; document.querySelector('#practiceClock').textContent = '00:00'; document.querySelector('#practiceProgress').style.width = '0'; renderPractice();
+    });
+    document.querySelector('#restartPage').addEventListener('click',() => { window.scrollTo({top:0,behavior:'smooth'}); });
+  </script>
+</body>
+</html>
